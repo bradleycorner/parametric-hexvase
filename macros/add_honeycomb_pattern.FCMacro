@@ -1,0 +1,138 @@
+# macros/add_honeycomb_pattern.FCMacro
+import FreeCAD as App
+import Part
+import PartDesign
+import Sketcher
+import Draft
+import math
+
+def create_honeycomb_pattern():
+    """Add parametric honeycomb embossed pattern to vase surface"""
+
+    doc = App.ActiveDocument
+    if doc is None or doc.Name != "HexVase":
+        App.Console.PrintError("HexVase document must be active\n")
+        return None
+
+    body = doc.getObject("Body")
+    if body is None:
+        App.Console.PrintError("Body object not found\n")
+        return None
+
+    # Create master hexagon sketch on YZ plane
+    if "HexSketch" not in [obj.Name for obj in doc.Objects]:
+        hex_sketch = body.newObject("Sketcher::SketchObject", "HexSketch")
+        hex_sketch.Support = (doc.getObject("YZ_Plane"), [""])
+        hex_sketch.MapMode = "FlatFace"
+
+        # Create regular hexagon centered at origin
+        hex_points = []
+        radius = 4.0  # Will be bound to HexSize/2
+        for i in range(6):
+            angle = i * math.pi / 3
+            x = radius * math.cos(angle)
+            y = radius * math.sin(angle)
+            hex_points.append(App.Vector(x, y, 0))
+
+        # Add hexagon geometry
+        line_ids = []
+        for i in range(6):
+            start = hex_points[i]
+            end = hex_points[(i + 1) % 6]
+            line_id = hex_sketch.addGeometry(Part.LineSegment(start, end), False)
+            line_ids.append(line_id)
+
+        # Add constraints for regular hexagon
+        for i in range(6):
+            hex_sketch.addConstraint(Sketcher.Constraint('Coincident', line_ids[i], 2, line_ids[(i + 1) % 6], 1))
+
+        # Add constraint to center first point at origin
+        hex_sketch.addConstraint(Sketcher.Constraint('Coincident', line_ids[0], 1, -1, 1))
+
+        # Add radius constraint using distance from center to first point
+        hex_sketch.addConstraint(Sketcher.Constraint('Distance', line_ids[0], 1, -1, 1, radius))
+
+        # Make the hexagon regular by constraining all sides equal
+        for i in range(1, 6):
+            hex_sketch.addConstraint(Sketcher.Constraint('Equal', line_ids[0], line_ids[i]))
+
+        doc.recompute()
+    else:
+        hex_sketch = doc.getObject("HexSketch")
+
+    # Create pad for single hexagon
+    if "HexPad" not in [obj.Name for obj in doc.Objects]:
+        hex_pad = body.newObject("PartDesign::Pad", "HexPad")
+        hex_pad.Profile = hex_sketch
+        hex_pad.Type = 0  # Length
+        hex_pad.Length = 1.5  # Will be bound to parameter
+        hex_pad.Midplane = False
+        hex_pad.Reversed = False
+
+        doc.recompute()
+    else:
+        hex_pad = doc.getObject("HexPad")
+
+    # Create polar array for honeycomb pattern
+    if "HexArrayPolar" not in [obj.Name for obj in doc.Objects]:
+        polar_array = body.newObject("PartDesign::PolarPattern", "HexArrayPolar")
+        polar_array.Originals = [hex_pad]
+        polar_array.Axis = (doc.getObject("Z_Axis"), [""])
+        polar_array.Angle = 360.0
+        polar_array.Occurrences = 8  # Will be calculated from spacing
+
+        doc.recompute()
+    else:
+        polar_array = doc.getObject("HexArrayPolar")
+
+    # Create linear array for vertical repetition
+    if "HexArrayLinear" not in [obj.Name for obj in doc.Objects]:
+        linear_array = body.newObject("PartDesign::LinearPattern", "HexArrayLinear")
+        linear_array.Originals = [polar_array]
+        linear_array.Direction = (doc.getObject("Z_Axis"), [""])
+        linear_array.Length = 90  # PatternEndHeight - PatternStartHeight
+        linear_array.Occurrences = 12  # Will be calculated from spacing
+
+        doc.recompute()
+    else:
+        linear_array = doc.getObject("HexArrayLinear")
+
+    # Set expressions after objects are created
+    if hasattr(doc, 'FileName') and doc.FileName:
+        try:
+            # Bind hexagon size to VarSet parameter (radius constraint)
+            constraint_count = len([c for c in hex_sketch.Constraints if c.Type == 'Distance'])
+            if constraint_count > 0:
+                # Find the distance constraint (radius)
+                for i, constraint in enumerate(hex_sketch.Constraints):
+                    if constraint.Type == 'Distance':
+                        hex_sketch.setExpression(f'Constraints[{i}]', '<<Params>>#VarSet.HexSize / 2')
+                        break
+
+            # Bind pad depth to VarSet parameter
+            hex_pad.setExpression('Length', '<<Params>>#VarSet.HexDepth')
+
+            # For array parameters, use simpler expressions that work reliably
+            # Calculate occurrences from spacing parameters - using conservative defaults
+            polar_array.setExpression('Occurrences', 'max(6, min(20, round(pi * (<<Params>>#VarSet.BottomDiameter + <<Params>>#VarSet.TopDiameter) / 2 / <<Params>>#VarSet.HexSpacingX)))')
+
+            # Calculate linear array parameters
+            linear_array.setExpression('Length', '<<Params>>#VarSet.PatternEndHeight - <<Params>>#VarSet.PatternStartHeight')
+            linear_array.setExpression('Occurrences', 'max(2, min(20, round((<<Params>>#VarSet.PatternEndHeight - <<Params>>#VarSet.PatternStartHeight) / <<Params>>#VarSet.HexSpacingY)))')
+
+            doc.recompute()
+            App.Console.PrintMessage("All expressions set successfully\n")
+        except Exception as e:
+            App.Console.PrintError(f"Warning: Could not set expressions: {str(e)}\n")
+            App.Console.PrintMessage("Expressions can be set manually after saving the document\n")
+
+    doc.recompute()
+    return linear_array
+
+# Execute the function
+if __name__ == "__main__":
+    pattern = create_honeycomb_pattern()
+    if pattern:
+        App.Console.PrintMessage("Honeycomb pattern created successfully\n")
+    else:
+        App.Console.PrintError("Failed to create honeycomb pattern\n")

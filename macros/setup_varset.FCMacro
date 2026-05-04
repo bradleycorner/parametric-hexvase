@@ -1,0 +1,68 @@
+# macros/setup_varset.FCMacro
+import FreeCAD as App
+
+def setup_vase_parameters():
+    """Create VarSet with all parametric variables for hexvase"""
+
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("Params")
+
+    # Create or get VarSet object
+    if "VarSet" in [obj.Name for obj in doc.Objects]:
+        vs = doc.getObject("VarSet")
+        # Clear existing properties to start fresh
+        props = vs.PropertiesList[:]
+        for prop in props:
+            if prop.startswith("Vase") or prop.startswith("Hex") or prop.startswith("Lip"):
+                vs.removeProperty(prop)
+    else:
+        vs = doc.addObject("App::DocumentObject", "VarSet")
+        vs.Label = "Vase Parameters"
+
+    # Base Geometry Parameters
+    vs.addProperty("App::PropertyLength", "VaseHeight", "BaseGeometry", "Overall vase height")
+    vs.VaseHeight = "120mm"
+
+    vs.addProperty("App::PropertyLength", "BottomDiameter", "BaseGeometry", "Base diameter")
+    vs.BottomDiameter = "80mm"
+
+    vs.addProperty("App::PropertyLength", "TopDiameter", "BaseGeometry", "Top diameter (tapered)")
+    vs.TopDiameter = "85mm"
+
+    vs.addProperty("App::PropertyLength", "WallThickness", "BaseGeometry", "Wall thickness")
+    vs.WallThickness = "2.5mm"
+
+    # Printable Lip Design Parameters
+    vs.addProperty("App::PropertyLength", "LipChamferDepth", "LipDesign", "Chamfer depth for printable overhang")
+    vs.LipChamferDepth = "3mm"
+
+    vs.addProperty("App::PropertyAngle", "LipChamferAngle", "LipDesign", "Chamfer angle (50° target)")
+    vs.LipChamferAngle = "50°"
+
+    # Honeycomb Pattern Parameters
+    vs.addProperty("App::PropertyLength", "HexSize", "HoneycombPattern", "Hexagon inscribed diameter")
+    vs.HexSize = "8mm"
+
+    vs.addProperty("App::PropertyLength", "HexDepth", "HoneycombPattern", "Emboss depth")
+    vs.HexDepth = "1.5mm"
+
+    vs.addProperty("App::PropertyLength", "HexSpacingX", "HoneycombPattern", "Horizontal spacing center-to-center")
+    vs.HexSpacingX = "9mm"
+
+    vs.addProperty("App::PropertyLength", "HexSpacingY", "HoneycombPattern", "Vertical spacing center-to-center")
+    vs.HexSpacingY = "7.8mm"
+
+    vs.addProperty("App::PropertyLength", "PatternStartHeight", "HoneycombPattern", "Pattern start from base")
+    vs.PatternStartHeight = "10mm"
+
+    vs.addProperty("App::PropertyLength", "PatternEndHeight", "HoneycombPattern", "Pattern end height")
+    vs.PatternEndHeight = "100mm"
+
+    doc.recompute()
+    return vs
+
+# Execute the function
+if __name__ == "__main__":
+    setup_vase_parameters()
+    App.Console.PrintMessage("VarSet parameters created successfully\n")

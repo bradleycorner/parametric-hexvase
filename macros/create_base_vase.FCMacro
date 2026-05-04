@@ -1,0 +1,104 @@
+# macros/create_base_vase.FCMacro
+import FreeCAD as App
+import Part
+import PartDesign
+import Sketcher
+
+def create_base_vase_geometry():
+    """Create parametric base vase with tapered form and chamfered lip"""
+
+    doc = App.ActiveDocument
+    if doc is None or doc.Name != "HexVase":
+        # Try to get HexVase document or create it
+        if "HexVase" in App.listDocuments():
+            doc = App.getDocument("HexVase")
+            App.setActiveDocument("HexVase")
+        else:
+            doc = App.newDocument("HexVase")
+
+    # Create PartDesign Body
+    if "Body" not in [obj.Name for obj in doc.Objects]:
+        body = doc.addObject("PartDesign::Body", "Body")
+    else:
+        body = doc.getObject("Body")
+
+    # Create base circle sketch on XY plane
+    if "BaseSketch" not in [obj.Name for obj in doc.Objects]:
+        base_sketch = body.newObject("Sketcher::SketchObject", "BaseSketch")
+        base_sketch.AttachmentSupport = (doc.getObject("XY_Plane"), [""])
+        base_sketch.MapMode = "FlatFace"
+
+        # Add circle geometry
+        circle = Part.Circle(App.Vector(0,0,0), App.Vector(0,0,1), 40)
+        geo_id = base_sketch.addGeometry(circle, False)
+
+        # Add constraints
+        base_sketch.addConstraint(Sketcher.Constraint('Coincident', geo_id, 3, -1, 1))
+        base_sketch.addConstraint(Sketcher.Constraint('Radius', geo_id, 40))
+
+        doc.recompute()
+    else:
+        base_sketch = doc.getObject("BaseSketch")
+
+    # Create pad with taper for vase form
+    if "VasePad" not in [obj.Name for obj in doc.Objects]:
+        pad = body.newObject("PartDesign::Pad", "VasePad")
+        pad.Profile = base_sketch
+        pad.Length = 120  # Will be bound to parameter
+        pad.TaperAngle = 1.19  # Calculated for 80->85mm taper over 120mm height: atan(2.5/120) = 1.19°
+        pad.Reversed = False
+
+        doc.recompute()
+    else:
+        pad = doc.getObject("VasePad")
+
+    # Create shell for wall thickness
+    if "VaseShell" not in [obj.Name for obj in doc.Objects]:
+        shell = body.newObject("PartDesign::Thickness", "VaseShell")
+        shell.Base = pad
+        shell.Value = 2.5  # Will be bound to parameter
+        shell.Mode = 0  # Remove inside (hollows out the object)
+
+        doc.recompute()
+    else:
+        shell = doc.getObject("VaseShell")
+
+    # Add chamfer to edges for printability
+    if "LipChamfer" not in [obj.Name for obj in doc.Objects]:
+        chamfer = body.newObject("PartDesign::Chamfer", "LipChamfer")
+        chamfer.Base = shell
+        chamfer.Size = 3.0  # Will be bound to parameter
+        chamfer.UseAllEdges = True  # Chamfer all edges
+
+        doc.recompute()
+    else:
+        chamfer = doc.getObject("LipChamfer")
+
+    # Set expressions after document is saved (required for XLink)
+    if hasattr(doc, 'FileName') and doc.FileName:
+        try:
+            # Bind radius to VarSet parameter
+            base_sketch.setExpression('Constraints[1]', '<<Params>>#VarSet.BottomDiameter / 2')
+
+            # Bind pad parameters
+            pad.setExpression('Length', '<<Params>>#VarSet.VaseHeight')
+            pad.setExpression('TaperAngle', 'atan((<<Params>>#VarSet.TopDiameter - <<Params>>#VarSet.BottomDiameter) / (2 * <<Params>>#VarSet.VaseHeight)) * 180 / pi')
+
+            # Bind shell parameter
+            shell.setExpression('Value', '<<Params>>#VarSet.WallThickness')
+
+            # Bind chamfer parameters
+            chamfer.setExpression('Size', '<<Params>>#VarSet.LipChamferDepth')
+            chamfer.setExpression('Angle', '<<Params>>#VarSet.LipChamferAngle')
+
+            doc.recompute()
+        except Exception as e:
+            App.Console.PrintError(f"Warning: Could not set expressions. Document may need to be saved first: {str(e)}\n")
+
+    doc.recompute()
+    return body
+
+# Execute the function
+if __name__ == "__main__":
+    create_base_vase_geometry()
+    App.Console.PrintMessage("Base vase geometry created successfully\n")
