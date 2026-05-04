@@ -17,7 +17,7 @@ def setup_vase_parameters():
             if prop.startswith("Vase") or prop.startswith("Hex") or prop.startswith("Lip"):
                 vs.removeProperty(prop)
     else:
-        vs = doc.addObject("App::FeaturePython", "VarSet")
+        vs = doc.addObject("App::DocumentObject", "VarSet")
         vs.Label = "Vase Parameters"
 
     # Base Geometry Parameters
