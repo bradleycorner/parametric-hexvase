@@ -45,7 +45,7 @@ def create_base_vase_geometry():
         pad = body.newObject("PartDesign::Pad", "VasePad")
         pad.Profile = base_sketch
         pad.Length = 120  # Will be bound to parameter
-        pad.TaperAngle = 2.86  # Calculated for 80->85mm taper over 120mm height
+        pad.TaperAngle = 1.19  # Calculated for 80->85mm taper over 120mm height: atan(2.5/120) = 1.19°
         pad.Reversed = False
 
         doc.recompute()
@@ -87,8 +87,9 @@ def create_base_vase_geometry():
             # Bind shell parameter
             shell.setExpression('Value', '<<Params>>#VarSet.WallThickness')
 
-            # Bind chamfer parameter
+            # Bind chamfer parameters
             chamfer.setExpression('Size', '<<Params>>#VarSet.LipChamferDepth')
+            chamfer.setExpression('Angle', '<<Params>>#VarSet.LipChamferAngle')
 
             doc.recompute()
         except Exception as e:
